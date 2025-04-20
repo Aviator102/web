@@ -1,41 +1,30 @@
-import { useState } from 'react';
+import fetch from 'node-fetch';
+import { URL } from 'url';
 
-export default function Home() {
-  const [inputUrl, setInputUrl] = useState('');
-  const [proxyUrl, setProxyUrl] = useState('');
+export default async function handler(req, res) {
+  const { url } = req.query;
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!inputUrl.startsWith('http')) {
-      alert('A URL deve começar com http ou https');
-      return;
-    }
-    setProxyUrl(`/api/proxy?url=${encodeURIComponent(inputUrl)}`);
-  };
+  if (!url || !url.startsWith('http')) {
+    return res.status(400).send('URL inválida.');
+  }
 
-  return (
-    <div style={{ padding: 20 }}>
-      <h1>🛡️ Mini Proxy via Vercel</h1>
-      <form onSubmit={handleSubmit}>
-        <input
-          type="text"
-          placeholder="https://exemplo.com"
-          value={inputUrl}
-          onChange={(e) => setInputUrl(e.target.value)}
-          style={{ width: '80%', padding: '10px' }}
-        />
-        <button type="submit" style={{ padding: '10px 20px', marginLeft: '10px' }}>
-          Acessar
-        </button>
-      </form>
-      <div style={{ marginTop: 20 }}>
-        {proxyUrl && (
-          <iframe
-            src={proxyUrl}
-            style={{ width: '100%', height: '80vh', border: '1px solid #ccc' }}
-          ></iframe>
-        )}
-      </div>
-    </div>
-  );
+  try {
+    // Requisição para o site original
+    const response = await fetch(url);
+    const contentType = response.headers.get('content-type') || 'text/html';
+    const body = await response.text();
+
+    // Reescrever os links relativos para absolutos
+    const updatedBody = body.replace(/(src|href)="(?!http)([^"]+)"/g, (match, p1, p2) => {
+      const absoluteUrl = new URL(p2, url).href; // Converte para URL absoluta
+      return `${p1}="${absoluteUrl}"`;
+    });
+
+    // Responde com o HTML modificado
+    res.setHeader('Content-Type', contentType);
+    res.status(200).send(updatedBody);
+  } catch (err) {
+    console.error('Erro ao acessar a URL:', err);
+    res.status(500).send('Erro ao buscar o conteúdo da URL.');
+  }
 }
