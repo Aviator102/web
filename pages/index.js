@@ -1,5 +1,12 @@
 import fetch from 'node-fetch';
 import { URL } from 'url';
+import { Readable } from 'stream';
+
+// Função auxiliar para transformar conteúdo de URL relativa em absoluta
+const rewriteUrl = (url, base) => {
+  const parsedUrl = new URL(url, base);
+  return parsedUrl.href;
+};
 
 export default async function handler(req, res) {
   const { url } = req.query;
@@ -9,22 +16,24 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Requisição para o site original
+    // Requisição do conteúdo da página original
     const response = await fetch(url);
-    const contentType = response.headers.get('content-type') || 'text/html';
+
+    // Verifica o tipo de conteúdo para garantir que o proxy pode lidar com ele
+    const contentType = response.headers.get('content-type');
     const body = await response.text();
 
-    // Reescrever os links relativos para absolutos
+    // Modifica links relativos (src, href) para links absolutos
     const updatedBody = body.replace(/(src|href)="(?!http)([^"]+)"/g, (match, p1, p2) => {
-      const absoluteUrl = new URL(p2, url).href; // Converte para URL absoluta
-      return `${p1}="${absoluteUrl}"`;
+      return `${p1}="${rewriteUrl(p2, url)}"`;
     });
 
-    // Responde com o HTML modificado
+    // Envia o conteúdo alterado (HTML) para o navegador
     res.setHeader('Content-Type', contentType);
     res.status(200).send(updatedBody);
-  } catch (err) {
-    console.error('Erro ao acessar a URL:', err);
-    res.status(500).send('Erro ao buscar o conteúdo da URL.');
+
+  } catch (error) {
+    console.error('Erro ao tentar acessar a URL:', error);
+    res.status(500).send('Erro ao acessar a URL solicitada.');
   }
 }
