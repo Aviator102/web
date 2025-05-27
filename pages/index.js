@@ -1,11 +1,12 @@
 import fetch from 'node-fetch';
 import { URL } from 'url';
-import path from 'path';
 
-// Função para reescrever URLs relativas para absolutas
 const rewriteUrl = (url, base) => {
-  const parsedUrl = new URL(url, base);
-  return parsedUrl.href;
+  try {
+    return new URL(url, base).href;
+  } catch (e) {
+    return url; // Fallback para evitar erro com URLs inválidas
+  }
 };
 
 export default async function handler(req, res) {
@@ -16,23 +17,27 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Fetch do conteúdo HTML original
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      }
+    });
 
-    // Se a resposta não for bem-sucedida, envia um erro
     if (!response.ok) {
       return res.status(response.status).send('Erro ao acessar a URL solicitada.');
     }
 
-    // Conteúdo da página HTML
+    const contentType = response.headers.get('content-type');
+    if (!contentType || !contentType.includes('text/html')) {
+      return res.status(415).send('O conteúdo retornado não é HTML.');
+    }
+
     const body = await response.text();
 
-    // Reescrever os links relativos para absolutos
-    const updatedBody = body.replace(/(src|href)="(?!http)([^"]+)"/g, (match, p1, p2) => {
+    const updatedBody = body.replace(/(src|href)=["'](?!https?:\/\/|\/\/)([^"']+)["']/g, (match, p1, p2) => {
       return `${p1}="${rewriteUrl(p2, url)}"`;
     });
 
-    // Definir tipo de conteúdo para o HTML
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(updatedBody);
 
